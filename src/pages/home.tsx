@@ -1,12 +1,16 @@
 import { Box } from "@material-ui/core";
 import MicIcon from '@material-ui/icons/Mic';
 import StopIcon from '@material-ui/icons/Stop';
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import RecordRTC, {StereoAudioRecorder} from 'recordrtc'
+import { END_OF_FILE, WS_STATE } from "../constants/constants";
 import { voiceAssistantService } from "../services/voice.assistant.service";
+import { getSocket } from "../services/websocket";
 
 import { useStyles } from "./home.style";
 
+
+let ackCount = 0;
 
 const HomePage = () => {
     let [isMicOn, setIsMicOn] = useState(false);
@@ -17,7 +21,41 @@ const HomePage = () => {
 
     const classes = useStyles();
 
+    const socket = getSocket();
+
+    const handleOnMessageSocket = (event: any) => {
+        if (event.data) {
+            const result = JSON.parse(event.data);
+            switch (result.type) {
+                case 'TEXT':
+                    const text = result.result;
+                    setSttText(text);
+                    break;
+                case 'CLOSE_SEND':
+                    cleanUpMic();
+                    setIsMicOn(false);
+                    console.log('CLOSE_SEND');
+                    break;
+                case 'ACK':
+                    ackCount += 1;
+                    if (ackCount > 3000) {
+                        ackCount = 0;
+                        setIsMicOn(false);
+                        getSocket().send(new Blob([END_OF_FILE]));
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    useEffect(() => {
+        socket.onmessage = handleOnMessageSocket;
+    }, [])
+
     const handleStarMic = (event: any) => {
+        setSttText("");
         navigator.mediaDevices.getUserMedia({
             video: false,
             audio: true
@@ -29,8 +67,11 @@ const HomePage = () => {
                 recorderType: StereoAudioRecorder,
                 disableLogs: true,
 
-                timeSlice: 500,
+                timeSlice: 100,
                 ondataavailable: async (blob: Blob) => {
+                    if (socket.readyState === WS_STATE.OPEN) {
+                        socket.send(blob);
+                    }
                 },
                 desiredSampRate: 16000,
                 bitrate: 128000,
@@ -46,11 +87,12 @@ const HomePage = () => {
     const handleStopMic = (event: any) => {
         cleanUpMic();
         setIsMicOn(false);
+        socket.send(new Blob([END_OF_FILE]));
     }
 
     const cleanUpMic = () => {
+        console.log("clean mic")
         if (recorder){
-            console.log("WTF")
             recorder.stopRecording(() => {
                 console.log("stoped")
                 let blob = recorder.getBlob();
@@ -60,13 +102,13 @@ const HomePage = () => {
                     let base64String: any = reader.result;
                     if (base64String){
                         base64String = base64String.split(",")[1];
-                        try {
-                            let res = await voiceAssistantService.stt(base64String);
-                            console.log(res.data);
-                            setSttText(res.data.text);
-                        } catch (e){
-                            console.log("ERROR: " + e)
-                        }
+                        // try {
+                        //     let res = await voiceAssistantService.stt(base64String);
+                        //     console.log(res.data);
+                        //     setSttText(res.data.text);
+                        // } catch (e){
+                        //     console.log("ERROR: " + e)
+                        // }
                     }
                 }
                 let url = URL.createObjectURL(blob);
@@ -75,6 +117,7 @@ const HomePage = () => {
             })
         }
         if (localAudioStream){
+            console.log("remove local audio stream")
             // turn off the mic stream
             localAudioStream.getAudioTracks().forEach(function(track: any){track.stop();});
             localAudioStream = undefined;
@@ -83,13 +126,13 @@ const HomePage = () => {
 
     return (
         <Fragment>
-            <p>STT text: {sttText}</p>
+            <h2>STT text: {sttText}</h2>
             <Box width="100%"
                  height="100vh"
                  display="flex"
                  flexDirection="column"
                  className={classes.root}>
-                <Box width="100%" height="80%"></Box>
+                <Box width="100%" height="2%"></Box>
                 <Box width="100%" height="20%"
                      display="flex"
                      justifyContent="center"
