@@ -32,7 +32,7 @@ const HomePage = () => {
                     setSttText(text);
                     break;
                 case 'CLOSE_SEND':
-                    cleanUpMic();
+                    // cleanUpMic();
                     setIsMicOn(false);
                     console.log('CLOSE_SEND');
                     break;
@@ -54,6 +54,12 @@ const HomePage = () => {
         socket.onmessage = handleOnMessageSocket;
     }, [])
 
+    useEffect(() => {
+        if (!isMicOn){
+            cleanUpMic();
+        }
+    }, [isMicOn])
+
     const handleStarMic = (event: any) => {
         setSttText("");
         navigator.mediaDevices.getUserMedia({
@@ -66,7 +72,6 @@ const HomePage = () => {
                 mimeType: "audio/wav",
                 recorderType: StereoAudioRecorder,
                 disableLogs: true,
-
                 timeSlice: 100,
                 ondataavailable: async (blob: Blob) => {
                     if (socket.readyState === WS_STATE.OPEN) {
