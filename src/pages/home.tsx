@@ -6,6 +6,7 @@ import RecordRTC, {StereoAudioRecorder} from 'recordrtc'
 import { END_OF_FILE, WS_STATE } from "../constants/constants";
 import { voiceAssistantService } from "../services/voice.assistant.service";
 import { getSocket } from "../services/websocket";
+import { getSocketIO } from "../services/socketio";
 
 import { useStyles } from "./home.style";
 
@@ -21,7 +22,8 @@ const HomePage = () => {
 
     const classes = useStyles();
 
-    const socket = getSocket();
+    // const socket = getSocket();
+    const socketio: any = getSocketIO();
 
     const handleOnMessageSocket = (event: any) => {
         if (event.data) {
@@ -50,8 +52,13 @@ const HomePage = () => {
         }
     }
 
+    const handleOnEventSocketIO = (message: any) => {
+        setSttText(message);
+    }
+
     useEffect(() => {
-        socket.onmessage = handleOnMessageSocket;
+        // socket.onmessage = handleOnMessageSocket;
+        socketio.on("stt", handleOnEventSocketIO);
     }, [])
 
     useEffect(() => {
@@ -74,8 +81,11 @@ const HomePage = () => {
                 disableLogs: true,
                 timeSlice: 100,
                 ondataavailable: async (blob: Blob) => {
-                    if (socket.readyState === WS_STATE.OPEN) {
-                        socket.send(blob);
+                    // if (socket.readyState === WS_STATE.OPEN) {
+                    //     socket.send(blob);
+                    // }
+                    if (socketio){
+                        socketio.emit("stt", blob);
                     }
                 },
                 desiredSampRate: 16000,
@@ -92,7 +102,7 @@ const HomePage = () => {
     const handleStopMic = (event: any) => {
         cleanUpMic();
         setIsMicOn(false);
-        socket.send(new Blob([END_OF_FILE]));
+        // socket.send(new Blob([END_OF_FILE]));
     }
 
     const cleanUpMic = () => {

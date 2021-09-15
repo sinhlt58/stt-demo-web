@@ -1,5 +1,6 @@
 export const { REACT_APP_VOICE_ASSISTANT_API_URL = '' } = process.env;
 export const { REACT_APP_SPEECH_TO_TEXT_ENDPOINT = '' } = process.env
+export const { REACT_APP_STT_SOCKETIO_ENDPOINT = '' } = process.env
 
 
 export enum WS_STATE {
