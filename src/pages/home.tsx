@@ -59,7 +59,7 @@ const HomePage = () => {
     useEffect(() => {
         // socket.onmessage = handleOnMessageSocket;
         socketio.on("stt", handleOnEventSocketIO);
-    }, [])
+    }, [socketio])
 
     useEffect(() => {
         if (!isMicOn){
@@ -79,7 +79,7 @@ const HomePage = () => {
                 mimeType: "audio/wav",
                 recorderType: StereoAudioRecorder,
                 disableLogs: true,
-                timeSlice: 100,
+                timeSlice: 5000,
                 ondataavailable: async (blob: Blob) => {
                     // if (socket.readyState === WS_STATE.OPEN) {
                     //     socket.send(blob);
@@ -87,9 +87,13 @@ const HomePage = () => {
                     if (socketio){
                         socketio.emit("stt", blob);
                     }
+                    // const buffer = await blob.arrayBuffer();
+                    // console.log("---")
+                    // console.log(blob.size)
+                    // console.log(blob.type)
+                    // console.log(buffer.byteLength)
                 },
                 desiredSampRate: 16000,
-                bitrate: 128000,
                 bitsPerSecond: 128000,
                 numberOfAudioChannels: 1,
             });
@@ -112,15 +116,20 @@ const HomePage = () => {
                 console.log("stoped")
                 let blob = recorder.getBlob();
                 let reader = new FileReader();
+                if (socketio){
+                    // socketio.emit("stt", blob);
+                    console.log("sent!")
+                }
                 reader.readAsDataURL(blob);
                 reader.onloadend = async () => {
                     let base64String: any = reader.result;
                     if (base64String){
                         base64String = base64String.split(",")[1];
+                        // socketio.emit("stt", base64String)
                         // try {
                         //     let res = await voiceAssistantService.stt(base64String);
                         //     console.log(res.data);
-                        //     setSttText(res.data.text);
+                        //     // setSttText(res.data.text);
                         // } catch (e){
                         //     console.log("ERROR: " + e)
                         // }
