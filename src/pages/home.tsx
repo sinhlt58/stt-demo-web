@@ -53,13 +53,9 @@ const HomePage = () => {
     }
 
     const handleOnEventSocketIO = (message: any) => {
-        setSttText(message);
+        setSttText(`${sttText} - ${message}`);
     }
-
-    useEffect(() => {
-        // socket.onmessage = handleOnMessageSocket;
-        socketio.on("stt", handleOnEventSocketIO);
-    }, [socketio])
+    socketio.on("stt", handleOnEventSocketIO);
 
     useEffect(() => {
         if (!isMicOn){
