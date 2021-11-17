@@ -3,68 +3,69 @@ import MicIcon from '@material-ui/icons/Mic';
 import StopIcon from '@material-ui/icons/Stop';
 import { Fragment, useEffect, useState } from "react";
 import RecordRTC, {StereoAudioRecorder} from 'recordrtc'
-import { END_OF_FILE, WS_STATE } from "../constants/constants";
-import { voiceAssistantService } from "../services/voice.assistant.service";
-import { getSocket } from "../services/websocket";
 import { getSocketIO } from "../services/socketio";
-
 import { useStyles } from "./home.style";
 
-
-let ackCount = 0;
+const ROOM_NAME = "demo_stt"
+enum JoinRoomStatus {
+    IDLE = "idle",
+    CHOSE_NAME = "choose_name",
+    JOIND_ROOM = "joind_room",
+}
+const DEMO_MODE_TAKE_NOTE = "Taking note"
+const DEMO_MODE_LONG_CHAT = "Long chat"
 
 const HomePage = () => {
-    let [isMicOn, setIsMicOn] = useState(false);
-    let [recorder, setRecorder] = useState<any>(undefined);
-    let [localAudioStream, setLocalAudioStream] = useState<any>(undefined);
-    let [blobURL, setBlobURL] = useState<any>(undefined);
-    let [sttText, setSttText] = useState<string>("");
+    const [isMicOn, setIsMicOn] = useState(false);
+    const [recorder, setRecorder] = useState<any>(undefined);
+    const [localAudioStream, setLocalAudioStream] = useState<any>(undefined);
+    const [blobURL, setBlobURL] = useState<any>(undefined);
+    const [sttNote, setSttNote] = useState<string>("");
+    const [joinRoomStatus, setJoinRoomStatus] = useState<string>("idle");
+    const [userName, setUserName] = useState<string>("");
+    const [roomMessages, setRoomMessages] = useState<string[]>([]);
+    const [previousUser, setPreviousUser] = useState<string>("");
 
     const classes = useStyles();
 
-    // const socket = getSocket();
     const socketio: any = getSocketIO();
 
-    const handleOnMessageSocket = (event: any) => {
-        if (event.data) {
-            const result = JSON.parse(event.data);
-            switch (result.type) {
-                case 'TEXT':
-                    const text = result.result;
-                    setSttText(text);
-                    break;
-                case 'CLOSE_SEND':
-                    // cleanUpMic();
-                    setIsMicOn(false);
-                    console.log('CLOSE_SEND');
-                    break;
-                case 'ACK':
-                    ackCount += 1;
-                    if (ackCount > 3000) {
-                        ackCount = 0;
-                        setIsMicOn(false);
-                        getSocket().send(new Blob([END_OF_FILE]));
-                    }
-                    break;
-                default:
-                    break;
+    useEffect(() => {
+        const onSocketIOSTTTakeNote = (message: any) => {
+            const {stt_text, is_stop} = message;
+            setSttNote(`${sttNote}, ${stt_text}`)
+            if (is_stop){
+                setIsMicOn(false);
             }
         }
-    }
+        socketio.on("api_stt_take_note", onSocketIOSTTTakeNote);
 
-    const handleOnEventSocketIO = (message: any) => {
-        setSttText(`${sttText} - ${message}`);
-    }
-    socketio.on("stt", handleOnEventSocketIO);
+        const onSocketIOSTTRoom = (data: any) => {
+            const {username, message} = data;
+            if (username !== previousUser){
+                setRoomMessages([...roomMessages, `${username}: ${message}`]);
+                setPreviousUser(username);
+            } else {
+                setRoomMessages([...roomMessages, message]);
+            }
+            
+        }
+        socketio.on("stt_room", onSocketIOSTTRoom);
+
+        return () => {
+            socketio.off("stt_room", onSocketIOSTTRoom);
+            socketio.off("api_stt_take_note", onSocketIOSTTTakeNote);
+        }
+    }, [socketio, sttNote, previousUser, roomMessages]);
 
     useEffect(() => {
         if (!isMicOn){
             cleanUpMic();
         }
-    }, [isMicOn])
+    }, [isMicOn]);
 
     const handleStarMic = (event: any) => {
-        setSttText("");
+        setSttNote("");
         navigator.mediaDevices.getUserMedia({
             video: false,
             audio: true
@@ -75,19 +76,15 @@ const HomePage = () => {
                 mimeType: "audio/wav",
                 recorderType: StereoAudioRecorder,
                 disableLogs: true,
-                timeSlice: 5000,
+                timeSlice: 500,
                 ondataavailable: async (blob: Blob) => {
-                    // if (socket.readyState === WS_STATE.OPEN) {
-                    //     socket.send(blob);
-                    // }
                     if (socketio){
-                        socketio.emit("stt", blob);
+                        if (joinRoomStatus === JoinRoomStatus.JOIND_ROOM){
+                            socketio.emit("api_stt_long_chat", blob);
+                        } else {
+                            socketio.emit("api_stt_take_note", blob);
+                        }
                     }
-                    // const buffer = await blob.arrayBuffer();
-                    // console.log("---")
-                    // console.log(blob.size)
-                    // console.log(blob.type)
-                    // console.log(buffer.byteLength)
                 },
                 desiredSampRate: 16000,
                 bitsPerSecond: 128000,
@@ -102,7 +99,6 @@ const HomePage = () => {
     const handleStopMic = (event: any) => {
         cleanUpMic();
         setIsMicOn(false);
-        // socket.send(new Blob([END_OF_FILE]));
     }
 
     const cleanUpMic = () => {
@@ -140,13 +136,48 @@ const HomePage = () => {
             console.log("remove local audio stream")
             // turn off the mic stream
             localAudioStream.getAudioTracks().forEach(function(track: any){track.stop();});
-            localAudioStream = undefined;
+            setLocalAudioStream(undefined);
         }
+    }
+
+    const handleNameChanged = (e: any) => {
+        setUserName(e.target.value as string);
+    }
+
+    const joinRoom = () => {
+        socketio.emit("join", {
+            username: userName,
+            room: ROOM_NAME,
+        });
+        setJoinRoomStatus(JoinRoomStatus.JOIND_ROOM);
+    }
+
+    const leaveRoom = () => {
+        console.log("leave")
+        socketio.emit("leave", {
+            username: userName,
+            room: ROOM_NAME,
+        });
+        setJoinRoomStatus(JoinRoomStatus.IDLE);
+        setRoomMessages([]);
+        setIsMicOn(false);
     }
 
     return (
         <Fragment>
-            <h2>STT text: {sttText}</h2>
+            {
+                joinRoomStatus !== JoinRoomStatus.JOIND_ROOM &&
+                <>
+                    <h2>Demo usecase: {DEMO_MODE_TAKE_NOTE}</h2>
+                </>
+            }
+            {
+                joinRoomStatus === JoinRoomStatus.JOIND_ROOM &&
+                <>
+                    <h2>Demo usecase: {DEMO_MODE_LONG_CHAT}</h2>
+                    <span>Room: {ROOM_NAME}</span>
+                </>
+            }
             <Box width="100%"
                  height="100vh"
                  display="flex"
@@ -155,6 +186,7 @@ const HomePage = () => {
                 <Box width="100%" height="2%"></Box>
                 <Box width="100%" height="20%"
                      display="flex"
+                     flexDirection="column"
                      justifyContent="center"
                      alignItems="center"
                      className={classes.micContainer}
@@ -162,6 +194,58 @@ const HomePage = () => {
                     {!isMicOn && <MicIcon className={classes.mic} onClick={handleStarMic}></MicIcon>}
                     {isMicOn && <StopIcon className={classes.mic} onClick={handleStopMic}></StopIcon>}
                 </Box>
+                {
+                    joinRoomStatus !== JoinRoomStatus.JOIND_ROOM &&
+                    <h2>STT note text: {sttNote}</h2>
+                }
+                <Box width="100%" height="2rem">
+                    {
+                        (joinRoomStatus === JoinRoomStatus.IDLE && !isMicOn) &&
+                        <button style={{width: "8rem", height: "2rem"}}
+                            onClick={() => setJoinRoomStatus(JoinRoomStatus.CHOSE_NAME)}
+                        >
+                            JOIN ROOM NOW
+                        </button>
+                    }
+                    {
+                        joinRoomStatus === JoinRoomStatus.CHOSE_NAME &&
+                        <div>
+                            <input
+                                placeholder="Enter your name"
+                                onChange={handleNameChanged}
+                                value={userName}
+                            />
+                            <button
+                                style={{marginLeft: "1rem"}}
+                                onClick={joinRoom}
+                            >
+                                Let's go
+                            </button>
+                        </div>
+                    }
+                    {
+                        joinRoomStatus === JoinRoomStatus.JOIND_ROOM &&
+                        <div>
+                            <button style={{marginLeft: "1rem"}}
+                                onClick={leaveRoom}
+                            >
+                                Leave room
+                            </button>
+                        </div>
+                    }
+                </Box>
+                {
+                    joinRoomStatus === JoinRoomStatus.JOIND_ROOM &&
+                    roomMessages.map((m, index) => {
+                        return (
+                            <div key={index}>
+                                <span key={index}>
+                                    {m}
+                                </span>
+                            </div>
+                        )
+                    })
+                }
             </Box>
         </Fragment>
     )
