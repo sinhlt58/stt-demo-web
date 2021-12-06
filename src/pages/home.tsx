@@ -19,10 +19,11 @@ const HomePage = () => {
     const [isMicOn, setIsMicOn] = useState(false);
     const [recorder, setRecorder] = useState<any>(undefined);
     const [localAudioStream, setLocalAudioStream] = useState<any>(undefined);
-    const [blobURL, setBlobURL] = useState<any>(undefined);
+    // const [blobURL, setBlobURL] = useState<any>(undefined);
     const [sttNote, setSttNote] = useState<string>("");
     const [joinRoomStatus, setJoinRoomStatus] = useState<string>("idle");
     const [userName, setUserName] = useState<string>("");
+    const [roomName, setRoomName] = useState(ROOM_NAME);
     const [roomMessages, setRoomMessages] = useState<string[]>([]);
     const [previousUser, setPreviousUser] = useState<string>("");
 
@@ -36,6 +37,7 @@ const HomePage = () => {
             setSttNote(`${sttNote}, ${stt_text}`)
             if (is_stop){
                 setIsMicOn(false);
+                console.log(message)
             }
         }
         socketio.on("api_stt_take_note", onSocketIOSTTTakeNote);
@@ -62,7 +64,8 @@ const HomePage = () => {
         if (!isMicOn){
             cleanUpMic();
         }
-    }, [isMicOn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isMicOn]); 
 
     const handleStarMic = (event: any) => {
         setSttNote("");
@@ -129,7 +132,7 @@ const HomePage = () => {
                 }
                 let url = URL.createObjectURL(blob);
                 console.log(url);
-                setBlobURL(url);
+                // setBlobURL(url);
             })
         }
         if (localAudioStream){
@@ -144,10 +147,17 @@ const HomePage = () => {
         setUserName(e.target.value as string);
     }
 
+    const handleRoomNameChanged = (e: any) => {
+        const v = e.target.value as string;
+        if (v){
+            setRoomName(e.target.value as string);
+        }
+    }
+
     const joinRoom = () => {
         socketio.emit("join", {
             username: userName,
-            room: ROOM_NAME,
+            room: roomName,
         });
         setJoinRoomStatus(JoinRoomStatus.JOIND_ROOM);
     }
@@ -156,7 +166,7 @@ const HomePage = () => {
         console.log("leave")
         socketio.emit("leave", {
             username: userName,
-            room: ROOM_NAME,
+            room: roomName,
         });
         setJoinRoomStatus(JoinRoomStatus.IDLE);
         setRoomMessages([]);
@@ -175,7 +185,7 @@ const HomePage = () => {
                 joinRoomStatus === JoinRoomStatus.JOIND_ROOM &&
                 <>
                     <h2>Demo usecase: {DEMO_MODE_LONG_CHAT}</h2>
-                    <span>Room: {ROOM_NAME}</span>
+                    <span>Room: {roomName}</span>
                 </>
             }
             <Box width="100%"
@@ -210,13 +220,21 @@ const HomePage = () => {
                     {
                         joinRoomStatus === JoinRoomStatus.CHOSE_NAME &&
                         <div>
+                            <span>Name: </span>
                             <input
                                 placeholder="Enter your name"
                                 onChange={handleNameChanged}
                                 value={userName}
                             />
+                            <br />
+                            <span>Room name: </span>
+                            <input
+                                placeholder="Enter room name"
+                                onChange={handleRoomNameChanged}
+                                value={roomName}
+                            />
+                            <br />
                             <button
-                                style={{marginLeft: "1rem"}}
                                 onClick={joinRoom}
                             >
                                 Let's go
